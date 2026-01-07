@@ -28,39 +28,23 @@ app.use("/api/voice", voiceRoutes);
 // Start Google login
 app.get(
   "/auth/google",
-  passport.authenticate("google", {
-    scope: ["profile", "email"],
-    prompt: "select_account",
-  })
+  passport.authenticate("google", { scope: ["profile", "email"], prompt: "select_account" })
 );
 
 // Callback after Google login
 app.get(
   "/auth/google/callback",
-  passport.authenticate("google", { failureRedirect: "/login" }),
+  passport.authenticate("google", { session: false, failureRedirect: "/login" }),
   (req, res) => {
-    const user = req.user;
+    if (!req.user) return res.status(401).send("Login failed");
 
-    const redirectBase =
-      process.env.NODE_ENV === "production"
-        ? process.env.GOOGLE_REDIRECT_AFTER_LOGIN
-        : "http://localhost:5173";
+    const jwt = require("jsonwebtoken");
+    const token = jwt.sign({ id: req.user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
 
-    if (!redirectBase) {
-      return res.status(500).send("Redirect URL not configured");
-    }
-
-    // 🔹 Generate JWT token
-    const token = require("jsonwebtoken").sign(
-      { id: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
-
-    // 🔹 Build redirect URL with token
-    const redirectURL = `${redirectBase}/auth/google/callback?token=${token}&name=${encodeURIComponent(
-      user.name
-    )}&email=${encodeURIComponent(user.email)}&_id=${user._id}`;
+    // Redirect to frontend with token
+    const redirectURL = `${process.env.GOOGLE_REDIRECT_AFTER_LOGIN}/auth/google/callback?token=${token}&name=${encodeURIComponent(
+      req.user.name
+    )}&email=${encodeURIComponent(req.user.email)}`;
 
     res.redirect(redirectURL);
   }
